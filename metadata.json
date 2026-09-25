@@ -1,0 +1,6 @@
+{
+  "name": "VoyageMCP - AI Travel Planner & Coordinator",
+  "description": "Comprehensive AI travel planner and coordinator powered by Model Context Protocol (MCP) integrations, featuring global destination search, day-by-day itinerary planning, live SGD currency conversion, interactive maps, flights, stays, activities, weather, and visa checks.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
