@@ -42,7 +42,7 @@ export const PlacesView: React.FC<PlacesViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/80 p-1">
-          {['all', 'sightseeing', 'culture', 'food', 'nature', 'entertainment'].map((cat) => (
+          {['all', 'sightseeing', 'culture', 'food', 'nature', 'shopping', 'entertainment', 'relaxation'].map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}

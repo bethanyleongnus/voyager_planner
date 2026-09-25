@@ -53,7 +53,14 @@ export async function handleApiRequest(
       }
 
       try {
-        const ai = new GoogleGenAI({ apiKey });
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            },
+          },
+        });
         const systemInstruction = `You are VoyageMCP, an expert senior AI travel architect and planning copilot.
 You specialize in practical, realistic, and delightful travel itineraries for travellers departing from Singapore or globally.
 Current Trip State:

@@ -98,6 +98,14 @@ class McpClient {
     return this.callTool('search_places_attractions', { destination, category });
   }
 
+  public async getGroundTransport(destination: string): Promise<{ groundTransport: GroundTransportOption[]; transitCount: number }> {
+    return this.callTool('get_ground_transit_options', { destination });
+  }
+
+  public async getDayItineraryAlternatives(destination: string, dayNumber?: number, timeSlot?: string): Promise<{ availableAlternatives: PlaceActivity[] }> {
+    return this.callTool('get_day_itinerary_alternatives', { destination, dayNumber, timeSlot });
+  }
+
   public async calculateRoute(fromLocation: string, toLocation: string, cityContext = '') {
     return this.callTool('calculate_route_transit', { fromLocation, toLocation, cityContext });
   }

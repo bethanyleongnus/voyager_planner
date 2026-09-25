@@ -43,7 +43,7 @@ export const StaysView: React.FC<StaysViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/80 p-1">
-          {['all', 'hotel', 'boutique', 'apartment'].map((t) => (
+          {['all', 'hotel', 'boutique', 'ryokan', 'resort', 'apartment', 'hostel'].map((t) => (
             <button
               key={t}
               onClick={() => setFilterType(t)}

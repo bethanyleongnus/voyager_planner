@@ -1,9 +1,10 @@
 /**
  * Day-by-Day Itinerary & Route Timeline View
+ * Features dynamic daily schedule variation and in-line attraction swapping
  */
 
 import React, { useState } from 'react';
-import { DayPlan, ItineraryItem, DestinationSummary } from '../types/travel';
+import { DayPlan, ItineraryItem, DestinationSummary, PlaceActivity } from '../types/travel';
 import {
   Calendar,
   Clock,
@@ -16,30 +17,38 @@ import {
   ArrowDown,
   ChevronRight,
   Compass,
-  AlertCircle
+  ArrowRightLeft,
+  X,
+  Check
 } from 'lucide-react';
 
 interface ItineraryViewProps {
   destination: DestinationSummary;
   itinerary: DayPlan[];
   selectedDayNumber: number;
+  availablePlaces: PlaceActivity[];
   onSelectDay: (dayNumber: number) => void;
   onAddDay: () => void;
   onRemoveDay: (dayNumber: number) => void;
   onDeleteItem: (dayNumber: number, itemId: string) => void;
   onOpenAddModal: (dayNumber: number) => void;
+  onSwapItem?: (dayNumber: number, itemId: string, newPlace: PlaceActivity) => void;
 }
 
 export const ItineraryView: React.FC<ItineraryViewProps> = ({
   destination,
   itinerary,
   selectedDayNumber,
+  availablePlaces,
   onSelectDay,
   onAddDay,
   onRemoveDay,
   onDeleteItem,
   onOpenAddModal,
+  onSwapItem,
 }) => {
+  const [swappingItemId, setSwappingItemId] = useState<string | null>(null);
+
   const currentDay = itinerary.find((d) => d.dayNumber === selectedDayNumber) || itinerary[0];
 
   if (!currentDay) {
@@ -47,10 +56,10 @@ export const ItineraryView: React.FC<ItineraryViewProps> = ({
       <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center">
         <Compass className="h-10 w-10 text-slate-500 mb-2" />
         <h4 className="font-semibold text-white">No itinerary days found</h4>
-        <p className="text-xs text-slate-400 mt-1">Click below to initialize your day schedule</p>
+        <p className="text-xs text-slate-400 mt-1">Click below to initialize your schedule</p>
         <button
           onClick={onAddDay}
-          className="mt-4 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400"
+          className="mt-4 rounded-xl bg-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400 cursor-pointer"
         >
           Add Day 1
         </button>
@@ -146,8 +155,7 @@ export const ItineraryView: React.FC<ItineraryViewProps> = ({
       {/* Timeline Activities List */}
       <div className="relative pl-6 md:pl-8 space-y-6 before:absolute before:left-3 md:before:left-4 before:top-4 before:bottom-4 before:w-0.5 before:bg-slate-800">
         {currentDay.items.map((item, index) => {
-          const isFood = item.category === 'food';
-          const isRelax = item.category === 'relaxation';
+          const isSwapping = swappingItemId === item.id;
 
           return (
             <div key={item.id} className="relative space-y-4">
@@ -158,7 +166,7 @@ export const ItineraryView: React.FC<ItineraryViewProps> = ({
                     <Train className="h-3.5 w-3.5 text-sky-400" />
                     <span>{item.travelTimeFromPrevious.duration} via {item.travelTimeFromPrevious.mode} ({item.travelTimeFromPrevious.distanceKm} km)</span>
                   </div>
-                  <span className="text-[11px] text-slate-500">Optimized point-to-point transit</span>
+                  <span className="text-[11px] text-slate-500">Transit connection buffer</span>
                 </div>
               )}
 
@@ -208,10 +216,64 @@ export const ItineraryView: React.FC<ItineraryViewProps> = ({
                       <span className="leading-relaxed text-[11px]">{item.notes}</span>
                     </div>
                   )}
+
+                  {/* Inline Swapping Panel */}
+                  {isSwapping && (
+                    <div className="mt-3 rounded-xl border border-emerald-500/40 bg-slate-950 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                          <ArrowRightLeft className="h-3.5 w-3.5 text-emerald-400" />
+                          <span>Swap with another popular attraction in {destination.name}:</span>
+                        </span>
+                        <button
+                          onClick={() => setSwappingItemId(null)}
+                          className="text-slate-400 hover:text-white p-1"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                        {availablePlaces
+                          .filter((p) => p.name !== item.title)
+                          .map((place) => (
+                            <button
+                              key={place.id}
+                              onClick={() => {
+                                if (onSwapItem) {
+                                  onSwapItem(currentDay.dayNumber, item.id, place);
+                                }
+                                setSwappingItemId(null);
+                              }}
+                              className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-left text-xs text-slate-200 hover:border-emerald-500/50 hover:bg-slate-800 transition cursor-pointer"
+                            >
+                              <div className="space-y-0.5">
+                                <span className="font-semibold block truncate text-white">{place.name}</span>
+                                <span className="text-[11px] text-slate-400 capitalize">{place.category} • {place.costSGD === 0 ? 'Free' : `SGD ${place.costSGD}`}</span>
+                              </div>
+                              <Check className="h-3.5 w-3.5 text-emerald-400 shrink-0 ml-2" />
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Right Actions */}
                 <div className="flex items-center gap-2 shrink-0 md:pt-1">
+                  <button
+                    onClick={() => setSwappingItemId(isSwapping ? null : item.id)}
+                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium border transition cursor-pointer ${
+                      isSwapping
+                        ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300'
+                        : 'border-slate-800 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                    title="Swap with another popular attraction"
+                  >
+                    <ArrowRightLeft className="h-3.5 w-3.5" />
+                    <span>{isSwapping ? 'Cancel' : 'Swap Attraction'}</span>
+                  </button>
+
                   <button
                     onClick={() => onDeleteItem(currentDay.dayNumber, item.id)}
                     className="rounded-lg p-2 text-slate-400 hover:bg-rose-950/40 hover:text-rose-400 transition cursor-pointer"

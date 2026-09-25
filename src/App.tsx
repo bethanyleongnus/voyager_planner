@@ -39,6 +39,7 @@ import {
   DESTINATION_DETAILS_MAP,
   generateGenericDestinationDetails,
 } from './mcp/travel-data';
+import { resolveDestinationData } from './mcp/travel-mcp-server';
 import { mcpClient } from './services/mcpClient';
 import { Navbar } from './components/Navbar';
 import { ItineraryView } from './components/ItineraryView';
@@ -121,10 +122,7 @@ export default function App() {
 
   // Switch destination
   const handleSelectDestination = async (dest: DestinationSummary) => {
-    let details = DESTINATION_DETAILS_MAP[dest.id];
-    if (!details) {
-      details = generateGenericDestinationDetails(dest.name) as any;
-    }
+    const details = resolveDestinationData(dest.name || dest.id);
 
     setTrip((prev) => ({
       ...prev,
@@ -136,7 +134,7 @@ export default function App() {
     setVisaInfo(details.visa);
     setWeatherInfo((details.weather as any)?.default || details.weather);
     setFactoids(details.factoids);
-    setFlights(details.flightsFromSIN || (details as any).flights || []);
+    setFlights(details.flightsFromSIN || []);
     setGroundTransport(details.groundTransport || []);
     setAccommodations(details.accommodations || []);
     setPlaces(details.places || []);
@@ -146,35 +144,37 @@ export default function App() {
   };
 
   const handleCustomDestinationSearch = async (destName: string) => {
-    const generic = generateGenericDestinationDetails(destName);
+    const details = resolveDestinationData(destName);
+    const customDest: DestinationSummary = {
+      id: `dest-${destName.toLowerCase().replace(/\s+/g, '-')}`,
+      name: details.factoids.destinationName,
+      country: details.factoids.country,
+      region: 'International',
+      coordinates: details.places[0]?.coordinates || [35.6762, 139.6503],
+      currencyCode: 'USD',
+      currencySymbol: '$',
+      heroImage: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=1200&q=80',
+      description: details.factoids.tagline,
+      highlights: details.places.slice(0, 4).map((p) => p.name),
+      idealDurationDays: 6,
+      costLevel: 'moderate',
+      defaultAirport: 'International Hub',
+    };
+
     setTrip((prev) => ({
       ...prev,
-      destination: {
-        id: `dest-${destName.toLowerCase().replace(/\s+/g, '-')}`,
-        name: generic.factoids.destinationName,
-        country: generic.factoids.country,
-        region: 'Global Destination',
-        coordinates: generic.places[0]?.coordinates || [35.6762, 139.6503],
-        currencyCode: 'USD',
-        currencySymbol: '$',
-        heroImage: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=1200&q=80',
-        description: generic.factoids.tagline,
-        highlights: generic.places.slice(0, 4).map((p) => p.name),
-        idealDurationDays: 6,
-        costLevel: 'moderate',
-        defaultAirport: 'International Hub',
-      },
-      selectedFlightId: generic.flightsFromSIN?.[0]?.id,
-      selectedStayId: generic.accommodations?.[0]?.id,
+      destination: customDest,
+      selectedFlightId: details.flightsFromSIN?.[0]?.id,
+      selectedStayId: details.accommodations?.[0]?.id,
     }));
 
-    setVisaInfo(generic.visa);
-    setWeatherInfo((generic.weather as any)?.default || generic.weather);
-    setFactoids(generic.factoids);
-    setFlights(generic.flightsFromSIN || []);
-    setGroundTransport(generic.groundTransport || []);
-    setAccommodations(generic.accommodations || []);
-    setPlaces(generic.places || []);
+    setVisaInfo(details.visa);
+    setWeatherInfo((details.weather as any)?.default || details.weather);
+    setFactoids(details.factoids);
+    setFlights(details.flightsFromSIN || []);
+    setGroundTransport(details.groundTransport || []);
+    setAccommodations(details.accommodations || []);
+    setPlaces(details.places || []);
     setSelectedDayNumber(1);
 
     await initItineraryForDestination(destName, trip.durationDays);
@@ -276,6 +276,32 @@ export default function App() {
           };
         }
         return d;
+      }),
+    }));
+  };
+
+  const handleSwapItem = (dayNumber: number, itemId: string, newPlace: PlaceActivity) => {
+    setTrip((prev) => ({
+      ...prev,
+      itinerary: prev.itinerary.map((d) => {
+        if (d.dayNumber !== dayNumber) return d;
+        return {
+          ...d,
+          items: d.items.map((it) => {
+            if (it.id !== itemId) return it;
+            return {
+              ...it,
+              title: newPlace.name,
+              placeId: newPlace.id,
+              coordinates: newPlace.coordinates,
+              locationName: newPlace.address,
+              description: newPlace.description,
+              estimatedCostSGD: newPlace.costSGD,
+              notes: newPlace.insiderTip,
+              category: newPlace.category === 'food' ? 'food' : 'attraction',
+            };
+          }),
+        };
       }),
     }));
   };
@@ -426,11 +452,13 @@ export default function App() {
             destination={trip.destination}
             itinerary={trip.itinerary}
             selectedDayNumber={selectedDayNumber}
+            availablePlaces={places}
             onSelectDay={setSelectedDayNumber}
             onAddDay={handleAddDay}
             onRemoveDay={handleRemoveDay}
             onDeleteItem={handleDeleteItem}
             onOpenAddModal={(dayNum) => setAddActivityDayNumber(dayNum)}
+            onSwapItem={handleSwapItem}
           />
         )}
 

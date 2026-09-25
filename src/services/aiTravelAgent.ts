@@ -4,7 +4,6 @@
  * Edits itinerary, budget, duration, and destination in real time
  */
 
-import { GoogleGenAI } from '@google/genai';
 import { mcpClient } from './mcpClient';
 import { TripState, ChatMessage, DayPlan, ItineraryItem } from '../types/travel';
 import { POPULAR_DESTINATIONS, DESTINATION_DETAILS_MAP, generateGenericDestinationDetails } from '../mcp/travel-data';

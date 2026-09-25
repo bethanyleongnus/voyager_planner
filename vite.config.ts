@@ -4,37 +4,40 @@ import path from 'path';
 import { defineConfig, Plugin } from 'vite';
 import { handleApiRequest } from './src/server/apiHandler';
 
-function apiDevPlugin(): Plugin {
+function apiMiddlewarePlugin(): Plugin {
   return {
-    name: 'api-dev-middleware',
+    name: 'api-middleware',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         if (req.url && req.url.startsWith('/api')) {
-          const buffers: Buffer[] = [];
-          for await (const chunk of req) {
-            buffers.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-          }
-          const raw = Buffer.concat(buffers).toString('utf-8');
-          let parsedBody = null;
-          try {
-            parsedBody = raw ? JSON.parse(raw) : null;
-          } catch {
-            parsedBody = raw;
+          let bodyData: any = null;
+          if (req.method === 'POST' || req.method === 'PUT') {
+            const buffers: any[] = [];
+            for await (const chunk of req) {
+              buffers.push(chunk);
+            }
+            const rawBody = Buffer.concat(buffers).toString();
+            try {
+              bodyData = rawBody ? JSON.parse(rawBody) : {};
+            } catch {
+              bodyData = rawBody;
+            }
           }
 
           try {
-            const apiRes = await handleApiRequest(req.url, req.method || 'GET', parsedBody);
-            for (const [k, v] of Object.entries(apiRes.headers)) {
+            const result = await handleApiRequest(req.url, req.method || 'GET', bodyData);
+            for (const [k, v] of Object.entries(result.headers)) {
               res.setHeader(k, v);
             }
-            res.statusCode = apiRes.status;
-            res.end(JSON.stringify(apiRes.body));
+            res.statusCode = result.status;
+            res.end(typeof result.body === 'object' ? JSON.stringify(result.body) : result.body);
+            return;
           } catch (err: any) {
             res.statusCode = 500;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: err.message || 'Internal server error' }));
+            res.end(JSON.stringify({ error: err.message || 'API middleware error' }));
+            return;
           }
-          return;
         }
         next();
       });
@@ -44,7 +47,7 @@ function apiDevPlugin(): Plugin {
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), apiDevPlugin()],
+    plugins: [react(), tailwindcss(), apiMiddlewarePlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -59,3 +62,4 @@ export default defineConfig(() => {
     },
   };
 });
+
