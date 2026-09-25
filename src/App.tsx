@@ -81,7 +81,9 @@ export default function App() {
 
   // Destination Details loaded via MCP
   const [visaInfo, setVisaInfo] = useState<VisaInfo>(initialDetails.visa);
-  const [weatherInfo, setWeatherInfo] = useState<WeatherSeasonInfo>(initialDetails.weather.default);
+  const [weatherInfo, setWeatherInfo] = useState<WeatherSeasonInfo>(
+    (initialDetails.weather as any)?.default || initialDetails.weather
+  );
   const [factoids, setFactoids] = useState<DestinationFactoids>(initialDetails.factoids);
   const [flights, setFlights] = useState<FlightOption[]>(initialDetails.flightsFromSIN);
   const [groundTransport, setGroundTransport] = useState<GroundTransportOption[]>(initialDetails.groundTransport);
@@ -132,7 +134,7 @@ export default function App() {
     }));
 
     setVisaInfo(details.visa);
-    setWeatherInfo(details.weather.default || (details.weather as any));
+    setWeatherInfo((details.weather as any)?.default || details.weather);
     setFactoids(details.factoids);
     setFlights(details.flightsFromSIN || (details as any).flights || []);
     setGroundTransport(details.groundTransport || []);
@@ -147,18 +149,32 @@ export default function App() {
     const generic = generateGenericDestinationDetails(destName);
     setTrip((prev) => ({
       ...prev,
-      destination: generic.destination,
-      selectedFlightId: generic.flights[0]?.id,
-      selectedStayId: generic.accommodations[0]?.id,
+      destination: {
+        id: `dest-${destName.toLowerCase().replace(/\s+/g, '-')}`,
+        name: generic.factoids.destinationName,
+        country: generic.factoids.country,
+        region: 'Global Destination',
+        coordinates: generic.places[0]?.coordinates || [35.6762, 139.6503],
+        currencyCode: 'USD',
+        currencySymbol: '$',
+        heroImage: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=1200&q=80',
+        description: generic.factoids.tagline,
+        highlights: generic.places.slice(0, 4).map((p) => p.name),
+        idealDurationDays: 6,
+        costLevel: 'moderate',
+        defaultAirport: 'International Hub',
+      },
+      selectedFlightId: generic.flightsFromSIN?.[0]?.id,
+      selectedStayId: generic.accommodations?.[0]?.id,
     }));
 
     setVisaInfo(generic.visa);
-    setWeatherInfo(generic.weather);
+    setWeatherInfo((generic.weather as any)?.default || generic.weather);
     setFactoids(generic.factoids);
-    setFlights(generic.flights);
-    setGroundTransport(generic.groundTransport);
-    setAccommodations(generic.accommodations);
-    setPlaces(generic.places);
+    setFlights(generic.flightsFromSIN || []);
+    setGroundTransport(generic.groundTransport || []);
+    setAccommodations(generic.accommodations || []);
+    setPlaces(generic.places || []);
     setSelectedDayNumber(1);
 
     await initItineraryForDestination(destName, trip.durationDays);
@@ -294,10 +310,19 @@ export default function App() {
 
   // AI Copilot synchronization updates
   const handleAiTripUpdates = (updates: Partial<TripState>) => {
+    if (updates.destination && updates.destination.id !== trip.destination.id) {
+      handleSelectDestination(updates.destination);
+      return;
+    }
+
     setTrip((prev) => ({
       ...prev,
       ...updates,
     }));
+
+    if (updates.itinerary) {
+      setActiveTab('itinerary');
+    }
   };
 
   return (

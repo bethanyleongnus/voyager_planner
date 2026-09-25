@@ -9,6 +9,7 @@ import {
   GLOBAL_CURRENCY_RATES,
   DESTINATION_DETAILS_MAP,
   generateGenericDestinationDetails,
+  DestinationFullData,
 } from './travel-data';
 import {
   DayPlan,
@@ -33,7 +34,7 @@ export const TRAVEL_MCP_TOOLS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Destination query, e.g. "Tokyo", "Paris", "Bali", "Japan", "Switzerland"' },
+        query: { type: 'string', description: 'Destination query, e.g. "Tokyo", "Kyoto", "Paris", "Bali", "Rome", "London", "Seoul"' },
       },
       required: ['query'],
     },
@@ -153,10 +154,40 @@ export const TRAVEL_MCP_TOOLS: McpToolDefinition[] = [
   },
 ];
 
+/**
+ * Universal destination data resolver
+ */
+export function resolveDestinationData(query: string): DestinationFullData {
+  const norm = (query || '').toLowerCase().trim();
+
+  // Try exact key match
+  if (DESTINATION_DETAILS_MAP[norm]) {
+    return DESTINATION_DETAILS_MAP[norm];
+  }
+
+  // Try fuzzy key or destination name match
+  for (const [key, val] of Object.entries(DESTINATION_DETAILS_MAP)) {
+    const keyCity = key.split('-')[0].toLowerCase();
+    const destName = val.factoids.destinationName.toLowerCase();
+    const destCountry = val.factoids.country.toLowerCase();
+    if (
+      norm.includes(keyCity) ||
+      keyCity.includes(norm) ||
+      norm.includes(destName) ||
+      destName.includes(norm) ||
+      norm.includes(destCountry)
+    ) {
+      return val;
+    }
+  }
+
+  return generateGenericDestinationDetails(query);
+}
+
 export class TravelMcpServer {
   public serverInfo = {
     name: 'voyage-travel-mcp-server',
-    version: '1.2.0',
+    version: '1.3.0',
     protocolVersion: '2024-11-05',
     capabilities: {
       tools: {},
@@ -296,39 +327,39 @@ export class TravelMcpServer {
         return {
           query,
           count: 1,
-          destinations: [generic.destination],
-          note: 'Dynamic destination dossier generated from Open Geographic Atlas',
+          destinations: [
+            {
+              id: `dest-${query.replace(/\s+/g, '-')}`,
+              name: generic.factoids.destinationName,
+              country: generic.factoids.country,
+              region: 'International',
+              coordinates: generic.places[0]?.coordinates || [35.6762, 139.6503],
+              currencyCode: 'USD',
+              currencySymbol: '$',
+              heroImage: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=1200&q=80',
+              description: generic.factoids.tagline,
+              highlights: generic.places.slice(0, 4).map((p) => p.name),
+              idealDurationDays: 6,
+              costLevel: 'moderate',
+              defaultAirport: 'International Hub',
+            },
+          ],
         };
       }
 
       case 'get_destination_factoids': {
-        const dest = (args.destination || '').toLowerCase();
-        for (const [key, val] of Object.entries(DESTINATION_DETAILS_MAP)) {
-          if (key.includes(dest) || dest.includes(key.split('-')[0])) {
-            return val.factoids;
-          }
-        }
-        return generateGenericDestinationDetails(args.destination).factoids;
+        const data = resolveDestinationData(args.destination);
+        return data.factoids;
       }
 
       case 'get_live_weather': {
-        const dest = (args.destination || '').toLowerCase();
-        for (const [key, val] of Object.entries(DESTINATION_DETAILS_MAP)) {
-          if (key.includes(dest) || dest.includes(key.split('-')[0])) {
-            return val.weather.default;
-          }
-        }
-        return generateGenericDestinationDetails(args.destination).weather;
+        const data = resolveDestinationData(args.destination);
+        return data.weather;
       }
 
       case 'check_visa_requirements': {
-        const dest = (args.destinationCountry || '').toLowerCase();
-        for (const [key, val] of Object.entries(DESTINATION_DETAILS_MAP)) {
-          if (val.visa.destinationCountry.toLowerCase().includes(dest) || key.includes(dest)) {
-            return val.visa;
-          }
-        }
-        return generateGenericDestinationDetails(args.destinationCountry).visa;
+        const data = resolveDestinationData(args.destinationCountry || args.destination);
+        return data.visa;
       }
 
       case 'get_currency_rates': {
@@ -355,74 +386,51 @@ export class TravelMcpServer {
       }
 
       case 'search_flights': {
-        const dest = (args.destination || '').toLowerCase();
-        for (const [key, val] of Object.entries(DESTINATION_DETAILS_MAP)) {
-          if (key.includes(dest) || dest.includes(key.split('-')[0])) {
-            return {
-              origin: args.originAirport || 'SIN (Singapore Changi)',
-              destination: val.factoids.destinationName,
-              flights: val.flightsFromSIN,
-              provider: 'Open Flight Routes & Schedule MCP',
-            };
-          }
-        }
-        const gen = generateGenericDestinationDetails(args.destination);
+        const data = resolveDestinationData(args.destination);
         return {
           origin: args.originAirport || 'SIN (Singapore Changi)',
-          destination: gen.destination.name,
-          flights: gen.flights,
+          destination: data.factoids.destinationName,
+          flights: data.flightsFromSIN,
           provider: 'Open Flight Routes & Schedule MCP',
         };
       }
 
       case 'search_accommodations': {
-        const dest = (args.destination || '').toLowerCase();
-        for (const [key, val] of Object.entries(DESTINATION_DETAILS_MAP)) {
-          if (key.includes(dest) || dest.includes(key.split('-')[0])) {
-            return {
-              destination: val.factoids.destinationName,
-              accommodations: val.accommodations,
-              provider: 'Open Accommodations & Stays MCP',
-            };
-          }
-        }
-        const gen = generateGenericDestinationDetails(args.destination);
+        const data = resolveDestinationData(args.destination);
         return {
-          destination: gen.destination.name,
-          accommodations: gen.accommodations,
+          destination: data.factoids.destinationName,
+          accommodations: data.accommodations,
           provider: 'Open Accommodations & Stays MCP',
         };
       }
 
       case 'search_places_attractions': {
-        const dest = (args.destination || '').toLowerCase();
-        for (const [key, val] of Object.entries(DESTINATION_DETAILS_MAP)) {
-          if (key.includes(dest) || dest.includes(key.split('-')[0])) {
-            const places = args.category && args.category !== 'all'
-              ? val.places.filter((p) => p.category === args.category)
-              : val.places;
-            return {
-              destination: val.factoids.destinationName,
-              count: places.length,
-              places,
-              provider: 'Open Places & OSM MCP',
-            };
-          }
-        }
-        const gen = generateGenericDestinationDetails(args.destination);
+        const data = resolveDestinationData(args.destination);
+        const places = args.category && args.category !== 'all'
+          ? data.places.filter((p) => p.category === args.category)
+          : data.places;
         return {
-          destination: gen.destination.name,
-          count: gen.places.length,
-          places: gen.places,
+          destination: data.factoids.destinationName,
+          count: places.length,
+          places,
           provider: 'Open Places & OSM MCP',
         };
       }
 
       case 'calculate_route_transit': {
-        const { fromLocation, toLocation } = args;
-        // Deterministic realistic transit calculation
-        const durationMin = 12 + Math.floor(Math.random() * 15);
-        const distanceKm = (2.2 + Math.random() * 4.5).toFixed(1);
+        const { fromLocation, toLocation, cityContext } = args;
+        const durationMin = 14 + Math.floor(Math.random() * 12);
+        const distanceKm = (2.4 + Math.random() * 3.8).toFixed(1);
+        const transitName = (cityContext || '').toLowerCase().includes('kyoto')
+          ? 'Kyoto City Subway / Bus'
+          : (cityContext || '').toLowerCase().includes('paris')
+          ? 'Paris Metro Line 1 / RER'
+          : (cityContext || '').toLowerCase().includes('london')
+          ? 'London Underground (Tube)'
+          : (cityContext || '').toLowerCase().includes('seoul')
+          ? 'Seoul Metro Line 2 / 3'
+          : 'Metropolitan Transit Line';
+
         return {
           from: fromLocation,
           to: toLocation,
@@ -430,12 +438,12 @@ export class TravelMcpServer {
           recommendedMode: 'metro',
           distanceKm: parseFloat(distanceKm),
           transitSteps: [
-            `Walk 3 mins to nearest metro station`,
-            `Ride 3-4 stops on City Transit Line (${durationMin - 8} mins)`,
-            `Exit and walk 5 mins to ${toLocation}`,
+            `Walk 3 mins to nearest transit station`,
+            `Ride on ${transitName} (${durationMin - 6} mins)`,
+            `Arrive directly at ${toLocation}`,
           ],
           alternatives: [
-            { mode: 'taxi', duration: `${Math.max(8, durationMin - 4)} mins`, costEstimateSGD: 16 },
+            { mode: 'taxi', duration: `${Math.max(9, durationMin - 5)} mins`, costEstimateSGD: 15 },
             { mode: 'walk', duration: `${Math.round(parseFloat(distanceKm) * 14)} mins`, scenic: true },
           ],
           provider: 'Open Route & Transit Planner MCP',
@@ -444,18 +452,65 @@ export class TravelMcpServer {
 
       case 'generate_itinerary': {
         const destName = args.destination || 'Tokyo';
-        const days = Math.min(14, Math.max(1, args.durationDays || 8));
-        const details = DESTINATION_DETAILS_MAP['tokyo-japan'] && destName.toLowerCase().includes('tokyo')
-          ? DESTINATION_DETAILS_MAP['tokyo-japan']
-          : generateGenericDestinationDetails(destName);
+        const days = Math.min(14, Math.max(1, args.durationDays || 7));
+        const data = resolveDestinationData(destName);
+        const cityPlaces = data.places.length > 0 ? data.places : DESTINATION_DETAILS_MAP['tokyo-japan'].places;
 
         const itinerary: DayPlan[] = [];
-        const baseCoords = details.places[0]?.coordinates || [35.6762, 139.6503];
 
+        // Distribute real places across the days
         for (let d = 1; d <= days; d++) {
-          const dayPlaces = details.places;
-          const morningPlace = dayPlaces[(d - 1) % dayPlaces.length] || dayPlaces[0];
-          const afternoonPlace = dayPlaces[d % dayPlaces.length] || dayPlaces[0];
+          const morningIdx = ((d - 1) * 2) % cityPlaces.length;
+          const afternoonIdx = ((d - 1) * 2 + 1) % cityPlaces.length;
+
+          const morningPlace = cityPlaces[morningIdx];
+          const afternoonPlace = cityPlaces[afternoonIdx] || cityPlaces[0];
+
+          // Specific theme per day
+          const dayTheme =
+            d === 1
+              ? `Day 1: Arrival & Exploring ${morningPlace.name}`
+              : d === 2
+              ? `Day 2: ${afternoonPlace.name} & Local Gastronomy`
+              : d === 3
+              ? `Day 3: Scenic Culture & ${cityPlaces[(morningIdx + 2) % cityPlaces.length]?.name || 'Heritage District'}`
+              : d === days
+              ? `Day ${d}: Farewell Highlights, Souvenirs & Panoramic Views`
+              : `Day ${d}: ${morningPlace.name} & Neighborhood Discovery`;
+
+          const diningTitle =
+            data.factoids.destinationName === 'Kyoto'
+              ? 'Traditional Kyoto Kaiseki & Yuba (Tofu Skin) Lunch'
+              : data.factoids.destinationName === 'Tokyo'
+              ? 'Artisanal Hand-Pulled Ramen & Gyoza Feast'
+              : data.factoids.destinationName === 'Bali'
+              ? 'Balinese Bebek Betutu (Spiced Duck) & Fresh Coconut'
+              : data.factoids.destinationName === 'Paris'
+              ? 'Quintessential Parisian Bistro Lunch & Croissant'
+              : data.factoids.destinationName === 'London'
+              ? 'Borough Market Artisanal Savory Pie & Hot Bagel'
+              : data.factoids.destinationName === 'Seoul'
+              ? 'Sizzling Korean Bindaetteok & Kimbap Street Crawl'
+              : data.factoids.destinationName === 'Rome'
+              ? 'Authentic Carbonara & Artisanal Gelato Tasting'
+              : `Authentic ${data.factoids.destinationName} Regional Dining Experience`;
+
+          const eveningTitle =
+            data.factoids.destinationName === 'Kyoto'
+              ? 'Gion Lantern-Lit Evening Stroll & Tea House'
+              : data.factoids.destinationName === 'Tokyo'
+              ? 'Shinjuku Neon Skyline Walk & Omoide Yokocho'
+              : data.factoids.destinationName === 'Bali'
+              ? 'Jimbaran Bay Beachfront Candlelight Seafood Sunset'
+              : data.factoids.destinationName === 'Paris'
+              ? 'Seine River Twilight Cruise & Sparkling Eiffel Tower'
+              : data.factoids.destinationName === 'London'
+              ? 'Covent Garden Street Performers & West End Walk'
+              : data.factoids.destinationName === 'Seoul'
+              ? 'Hongdae Indie Live Street Busking & Night Market'
+              : data.factoids.destinationName === 'Rome'
+              ? 'Trastevere Piazza Walk & Evening Espresso'
+              : `${data.factoids.destinationName} Evening Illumination & Night Walk`;
 
           const items: ItineraryItem[] = [
             {
@@ -463,50 +518,50 @@ export class TravelMcpServer {
               dayNumber: d,
               timeSlot: 'morning',
               startTime: '09:00',
-              endTime: '11:30',
+              endTime: '11:45',
               title: morningPlace.name,
-              category: 'attraction',
+              category: morningPlace.category === 'food' ? 'food' : 'attraction',
               placeId: morningPlace.id,
               coordinates: morningPlace.coordinates,
               locationName: morningPlace.address,
               description: morningPlace.description,
               estimatedCostSGD: morningPlace.costSGD,
               travelTimeFromPrevious: {
-                duration: '15 mins',
+                duration: '14 mins',
                 mode: 'metro',
-                distanceKm: 2.4,
+                distanceKm: 2.3,
               },
-              provider: 'Open Itinerary Engine MCP',
+              provider: 'Open Places & OSM MCP',
               notes: morningPlace.insiderTip,
             },
             {
               id: `item-d${d}-2`,
               dayNumber: d,
               timeSlot: 'afternoon',
-              startTime: '12:00',
-              endTime: '14:30',
-              title: `Artisanal Lunch & Gastronomy Exploration`,
+              startTime: '12:15',
+              endTime: '14:00',
+              title: diningTitle,
               category: 'food',
-              coordinates: [morningPlace.coordinates[0] + 0.002, morningPlace.coordinates[1] + 0.003],
-              locationName: `Local Eateries near ${morningPlace.name}`,
-              description: `Sample regional culinary dishes, seasonal delicacies, and local craft drinks.`,
-              estimatedCostSGD: 25,
+              coordinates: [morningPlace.coordinates[0] + 0.003, morningPlace.coordinates[1] + 0.002],
+              locationName: `Local Dining Hub near ${morningPlace.name}`,
+              description: `Sample authentic regional specialties, seasonal ingredients, and local culinary culture.`,
+              estimatedCostSGD: 26,
               travelTimeFromPrevious: {
-                duration: '8 mins',
+                duration: '7 mins',
                 mode: 'walk',
-                distanceKm: 0.6,
+                distanceKm: 0.5,
               },
               provider: 'Open Itinerary Engine MCP',
-              notes: 'Slurp noodles or enjoy counter-seat omakase.',
+              notes: 'Arrive slightly before 12:30 PM to beat local lunch queues.',
             },
             {
               id: `item-d${d}-3`,
               dayNumber: d,
               timeSlot: 'afternoon',
-              startTime: '15:00',
-              endTime: '17:30',
+              startTime: '14:30',
+              endTime: '17:00',
               title: afternoonPlace.name,
-              category: 'attraction',
+              category: afternoonPlace.category === 'food' ? 'food' : 'attraction',
               placeId: afternoonPlace.id,
               coordinates: afternoonPlace.coordinates,
               locationName: afternoonPlace.address,
@@ -515,50 +570,50 @@ export class TravelMcpServer {
               travelTimeFromPrevious: {
                 duration: '18 mins',
                 mode: 'metro',
-                distanceKm: 3.8,
+                distanceKm: 3.6,
               },
-              provider: 'Open Itinerary Engine MCP',
+              provider: 'Open Places & OSM MCP',
               notes: afternoonPlace.insiderTip,
             },
             {
               id: `item-d${d}-4`,
               dayNumber: d,
               timeSlot: 'evening',
-              startTime: '19:00',
-              endTime: '21:30',
-              title: `Evening Skyline Vista & Night Walk`,
+              startTime: '18:30',
+              endTime: '21:00',
+              title: eveningTitle,
               category: 'relaxation',
-              coordinates: [baseCoords[0] + 0.004, baseCoords[1] + 0.005],
-              locationName: `${destName} City Lights`,
-              description: `Relax with sunset panoramic views, stroll through vibrant illuminated alleyways, and enjoy local dessert.`,
-              estimatedCostSGD: 15,
+              coordinates: [afternoonPlace.coordinates[0] - 0.002, afternoonPlace.coordinates[1] + 0.004],
+              locationName: `${data.factoids.destinationName} Central Cultural Quarter`,
+              description: `Unwind with lantern-lit avenues, scenic vistas, and dessert or craft beverages.`,
+              estimatedCostSGD: 18,
               travelTimeFromPrevious: {
                 duration: '12 mins',
                 mode: 'metro',
                 distanceKm: 2.1,
               },
               provider: 'Open Itinerary Engine MCP',
-              notes: 'Night views are spectacular and free of crowds.',
+              notes: 'Night atmosphere is relaxed and perfect for photography.',
             },
           ];
 
           itinerary.push({
             dayNumber: d,
             date: `Day ${d}`,
-            theme: d === 1 ? 'Arrival & Orientation' : d === days ? 'Farewell Highlights & Souvenirs' : `Culture, Cuisine & Exploration Part ${d}`,
+            theme: dayTheme,
             items,
-            areaSummary: morningPlace.name + ' & surrounding district',
-            estimatedWalkingKm: 6.5,
+            areaSummary: `${morningPlace.name} & surrounding district`,
+            estimatedWalkingKm: 6.2,
           });
         }
 
         const budgetCalc: TripBudgetBreakdown = {
-          flightsSGD: 780 * (args.numTravellers || 2),
-          staysSGD: 280 * (days - 1),
-          activitiesSGD: 80 * days * (args.numTravellers || 2),
+          flightsSGD: (data.flightsFromSIN[0]?.priceSGD || 780) * (args.numTravellers || 2),
+          staysSGD: (data.accommodations[0]?.pricePerNightSGD || 280) * (days - 1),
+          activitiesSGD: 60 * days * (args.numTravellers || 2),
           foodSGD: 70 * days * (args.numTravellers || 2),
           transportSGD: 20 * days * (args.numTravellers || 2),
-          bufferSGD: 300,
+          bufferSGD: 350,
           totalEstimatedSGD: 0,
           budgetLimitSGD: args.budgetTotalSGD || 4000 * (args.numTravellers || 2),
         };
@@ -571,11 +626,11 @@ export class TravelMcpServer {
           budgetCalc.bufferSGD;
 
         return {
-          destination: destName,
+          destination: data.factoids.destinationName,
           durationDays: days,
           days: itinerary,
           budgetEstimatedSGD: budgetCalc,
-          geographicClustering: 'Strictly grouped into geographically contiguous neighborhoods to prevent zig-zag travel.',
+          geographicClustering: 'Strictly grouped into geographically contiguous neighborhoods to prevent zig-zag transit exhaustion.',
           provider: 'Open Itinerary Engine MCP',
         };
       }

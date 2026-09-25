@@ -4,7 +4,7 @@
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { travelMcpServer, TRAVEL_MCP_TOOLS } from '../mcp/travel-mcp-server';
+import { travelMcpServer, TRAVEL_MCP_TOOLS, resolveDestinationData } from '../mcp/travel-mcp-server';
 import {
   POPULAR_DESTINATIONS,
   GLOBAL_CURRENCY_RATES,
@@ -117,13 +117,8 @@ Guidelines:
     // 4. Destination Full Details
     if (url.startsWith('/api/destination-details')) {
       const destParam = new URL(url, 'http://localhost').searchParams.get('dest') || 'tokyo-japan';
-      const norm = destParam.toLowerCase();
-      let matchedKey = Object.keys(DESTINATION_DETAILS_MAP).find((k) => k.includes(norm) || norm.includes(k));
-      if (matchedKey) {
-        return { status: 200, headers: jsonHeaders, body: DESTINATION_DETAILS_MAP[matchedKey] };
-      }
-      const generic = generateGenericDestinationDetails(destParam);
-      return { status: 200, headers: jsonHeaders, body: generic };
+      const details = resolveDestinationData(destParam);
+      return { status: 200, headers: jsonHeaders, body: details };
     }
 
     // 5. Exchange rates against SGD
